@@ -1,45 +1,33 @@
-!xapian {
-date     <D>       
-memo     <S> <> @2 %english
-account  <XACC>    
-amount   <XAMT>    
-category <XCAT>    
-}
-
 !doc $fn20121126 {
 @date       = 20121126
->1
--source     = 2012-11-26 [Check 1566 Unknown payee] @checking -15.00 {CHECK # 1566} @expenses +15.00
-@memo       | Check 1566 Unknown payee
+|[1]
+*source     : 2012-11-26 [Check 1566 Unknown payee] @checking -15.00 {CHECK # 1566} @expenses +15.00
+@memo       : Check 1566 Unknown payee
 @account    = checking
 @amount     = 15.00
 @category   = expenses
-<
->2
--source     = 2012-11-26 [Hannaford] @checking -37.61 {POS 11/26/12 09:56 8019 HANNAFORD #8231 BRUNSWICK ME 412039} @groceries +37.61
-@memo       | Hannaford
+|[2]
+*source     : 2012-11-26 [Hannaford] @checking -37.61 {POS 11/26/12 09:56 8019 HANNAFORD #8231 BRUNSWICK ME 412039} @groceries +37.61
+@memo       : Hannaford
 @account    = checking
 @amount     = 37.61
 @category   = expenses
             = household
             = groceries
-<
->3
--source     = 2012-11-26 [Hannaford] @checking -39.08 {POS 11/24/12 10:08 8019 HANNAFORD #8231 BRUNSWICK ME 335623} @groceries +39.08
-@memo       | Hannaford
+|[3]
+*source     : 2012-11-26 [Hannaford] @checking -39.08 {POS 11/24/12 10:08 8019 HANNAFORD #8231 BRUNSWICK ME 335623} @groceries +39.08
+@memo       : Hannaford
 @account    = checking
 @amount     = 39.08
 @category   = expenses
             = household
             = groceries
-<
->4
--source     = 2012-11-26 [Target] @checking -29.46 {POS 11/24/12 09:19 8019 TARGET T2130 TOPSHAM ME 713640} @household +29.46
-@memo       | Target
+|[4]
+*source     : 2012-11-26 [Target] @checking -29.46 {POS 11/24/12 09:19 8019 TARGET T2130 TOPSHAM ME 713640} @household +29.46
+@memo       : Target
 @account    = checking
 @amount     = 29.46
 @category   = expenses
             = household
-<
 }
 

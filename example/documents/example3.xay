@@ -1,17 +1,21 @@
 # Just a comment
 # Blank lines are also ignored
 
-!index {
-date     <D>       
-memo     <S> <> @2 %english
-descrip  <> %english
-account  <XACC>    
-amount   <XAMT>    
-category <XCAT>    
+!xapian {
+date     <D>
+month    <M>
+year     <Y>
+memo     <S> <Z> @2 %english
+descrip  <Z> %english
+account  <XACC> <Z>
+amount   <XAMT>
+category <XCAT> <Z>
 }
 
 !doc $fntest {
 @date     = 20150608
+@month    = 201506
+@year     = 2015
 @memo     : Hannaford
 @account  = checking
 @amount   = 87.13

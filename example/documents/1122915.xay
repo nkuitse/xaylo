@@ -1,0 +1,23 @@
+!doc $1122915 {
+@blvl = m
+@bsup = 0
+@descrip : 1 online resource (395 entries) : 1 image, digital files.
+@gmd : [electronic resource].
+*has = gmd
+*has = mform
+*has = mtyp
+*has = rdacarrier
+*has = rdacontent
+*has = rdamedia
+@idgrp = 15
+@mform = m
+@msup = 0
+@mtyp = cr
+@rdacarrier = cr
+@rdacontent = txt
+@rdamedia = c
+@rtyp = a
+@ser = 0
+@sig = acr
+@title : Collins dictionary of quotations [electronic resource].
+}
