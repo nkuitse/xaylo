@@ -1,0 +1,26 @@
+# Just a comment
+# Blank lines are also ignored
+
+!index {
+date     <D>       
+memo     <S> <> @2 %english
+descrip  <> %english
+account  <XACC>    
+amount   <XAMT>    
+category <XCAT>    
+}
+
+!doc $fntest {
+@date     = 20150608
+@memo     : Hannaford
+@account  = checking
+@amount   = 87.13
+@category = expenses
+          = household
+          = groceries
+*descrip  : This is an example showing
+          : how you can encode multiple
+          : values or a long text.
+*descrip  : This is added after a skip.
+}
+

@@ -1,0 +1,47 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+use Digest::SHA qw(sha1_hex);
+
+$/ = '';
+
+while (<STDIN>) {
+    next if !s/\A\[(\d+)\]\n//;
+    my %prop = map { split '=', $_, 2 } split "\n";
+    my $id = id(\%prop);
+    printf "!doc \$%s {\n", $id;
+    foreach (qw(name notes)) {
+        my $val = delete $prop{$_} // next;
+        printf <<'EOS', $_, $val;
+    @%-8s | %s
+EOS
+    }
+    my @addr = (
+        ( split /,\s+/, delete $prop{'address'} || '' ),
+        grep { defined $_ } delete @prop{qw(city state zip country)}
+    );
+    if (@addr) {
+        print '    @address  | ',
+        join("\n              | ", @addr), "\n";
+    }
+    if (defined(my $email = delete $prop{'email'})) {
+        print '    @email    | ', $_, "\n" for split /,\s*/, $email;
+    }
+    my %ph;
+    @ph{qw(home work cell fax)} = delete @prop{qw(phone workphone mobile fax)};
+    while (my ($k, $v) = each %ph) {
+        printf "    \@phone    | %s (%s)\n", $v, $k if defined $v;
+    }
+    while (my ($k, $v) = each %prop) {
+        printf "    *%-8s | %s\n", $k, $v;
+    }
+    print "}\n\n";
+}
+
+sub id {
+    my ($prop) = @_;
+    delete $prop->{'id'} // sha1_hex($prop->{'name'});
+}
+

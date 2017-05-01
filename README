@@ -1,0 +1,5 @@
+Index a file:
+    tnyp xapian.db < fj.tny
+
+Query using quest:
+    quest -d xapian.db -b id:Q id:fn20121126

@@ -1,0 +1,221 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+use diagnostics;
+
+use Search::Xapian qw(:standard);
+use Getopt::Long
+    qw(:config posix_default gnu_compat require_order bundling no_ignore_case);
+
+use constant SKIP => 20;
+
+sub usage;
+sub fatal;
+
+my ($conf_file, $query);
+GetOptions(
+    'q|query' => \$query,
+    'c|config-file=s' => \$conf_file,
+) or usage;
+my (%prefixes, %bool, %weight, %stemmer);
+
+&{ $query ? \&query : \&ingest };
+
+sub query {
+    my $dbdir = shift @ARGV;
+    usage if !@ARGV;
+    my $db = Search::Xapian::Database->new($dbdir);
+    $conf_file ||= "$dbdir/xaylo.conf";
+    read_conf($conf_file);
+    my $qp = Search::Xapian::QueryParser->new($db);
+    while (my ($field, $prefixes) = each %prefixes) {
+        if ($bool{$field}) {
+            $qp->add_boolean_prefix($field, $_) for @$prefixes;
+        }
+        else {
+            $qp->add_prefix($field, $_) for @$prefixes;
+        }
+    }
+    $qp->set_stemmer(Search::Xapian::Stem->new('english'));
+    $qp->set_default_op(OP_AND);
+    my @results = $db->enquire($qp->parse_query(join(' ', @ARGV)));
+    1;
+}
+
+sub ingest {
+    @ARGV = qw(.) if !@ARGV;
+    my $dbdir = shift @ARGV;
+    my $db = Search::Xapian::WritableDatabase->new($dbdir, DB_CREATE_OR_OPEN);
+    # $conf_file ||= "$dbdir/xaylo.conf";
+    read_conf($conf_file) if defined $conf_file;
+    my $fname = 'stdin';
+    if (@ARGV) {
+        $fname = shift @ARGV;
+        open STDIN, '<', $fname
+            or fatal "open $fname: $!";
+    }
+    while (<STDIN>) {
+        if (/^\s*!doc\s+\$(\S+)\s+\{\s*$/) {
+            my $uniq = $1;
+            my $data = '$'.$1."\n";
+            my ($ktype, $k, $vtype, $v, $skip);
+            my (%tgen, $tgen);
+            my $doc = Search::Xapian::Document->new;
+            $doc->add_term('Q'.$uniq);
+            while (<STDIN>) {
+                if (/^\s*\|(.*)/) {
+                    # |anything...
+                    # Store but do not index
+                    $data .= $1 . "\n";
+                }
+                elsif (/^\+(\d+)$/) {
+                    $tgen->increase_termpos($1) if $tgen;
+                }
+                elsif (/^\s*(?:([@*])(\S*)\s*)?([=:])\s*(.*)$/) {
+                    # STRUCTURE
+                    #   <keytype> <key>? <valtype> <val>
+                    #   keytype:
+                    #      @ index and store
+                    #      * index but do not store
+                    #   valtype:
+                    #      : parse
+                    #      = do not parse
+                    # EXAMPLE
+                    #   @id    = abc123
+                    #   @title : The Lonely Gargoyle
+                    #   @      : Once upon a time there was
+                    #          : a gargoyle who lived in
+                    #          : North Dakota.
+                    #   @      : The gargoyle's name was
+                    #          : Emmaline, and she was very
+                    #          : lonely.
+                    #   *      : One day, while pacing back
+                    #          : and forth on her parapet,
+                    #          : ...
+                    #   *kywd  = gargoyle
+                    #   *summ  : Blah blah blah...
+                    if (defined $1) {
+                        ($ktype, $k) = ($1, $2);
+                        $tgen = $tgen{$k};
+                        $skip = SKIP;
+                    }
+                    else {
+                        $skip = 0;
+                    }
+                    ($vtype, $v) = ($3, $4);
+                    die "Missing key type at line $. of $fname: $_"
+                        if !defined $ktype;
+                    $data .= "$k $v\n" if $ktype ne '*';
+                    # $data .= $_ if $ktype ne '*';
+                    my @prefixes = @{ $prefixes{$k} ||= [''] };
+                    my $weight = $weight{$k} ||= 1;
+                    if ($vtype eq '=') {
+                        $doc->add_term($_.$v, $weight) for @prefixes;
+                    }
+                    else {
+                        if (!$tgen) {
+                            $tgen = $tgen{$k} = Search::Xapian::TermGenerator->new;
+                            $tgen->set_stemmer(Search::Xapian::Stem->new($stemmer{$k} //= 'none'));
+                        }
+                        my $vnorm = lc $v;
+                        $tgen->set_document($doc);
+                        $tgen->index_text($vnorm, $weight, $_) for @prefixes;
+                        $tgen->increase_termpos($skip) if $skip;
+                    }
+                }
+                elsif (/^\s*\}\s*$/) {
+                    $doc->set_data($data);
+                    $db->replace_document_by_term('Q'.$uniq, $doc);
+                    last;
+                }
+                elsif (/^\s*>(\S*)\s*$/) {
+                    $data .= $_;
+                    # TODO enter subdocument
+                }
+                elsif (/^\s*<\s*$/) {
+                    $data .= $_;
+                    # TODO exit subdocument
+                }
+                elsif (!/^\s*(?:#.*)?$/) {
+                    die "Bad input: $_";
+                }
+            }
+        }
+        elsif (/^\s*(?:#.*)?$/) {
+            # Skip blank lines and comments
+        }
+        elsif (s/^!field\s+(\S+)\s+//) {
+            define_field($1, $_, $fname, $.);
+        }
+        else {
+            chomp;
+            fatal "unrecognized input at line $. of $fname: $_";
+        }
+    }
+    $db->flush;
+}
+
+sub trim {
+    local $_ = shift;
+    s/^\s+|\s+$//g;
+    $_;
+}
+
+sub define_field {
+    my ($field, $defstr, $fname, $lnum) = @_;
+    my @prefixes;
+    foreach (split /\s+/, $defstr) {
+        if (/^<(.*)>$/) {
+            push @prefixes, $1;
+        }
+        elsif (/^\@(\d+)$/) {
+            $weight{$field} = $1;
+        }
+        elsif (/^\%(\S+)$/) {
+            if ($1 eq 'boolean') {
+                $stemmer{$field} = 'none';
+                $bool{$field} = 1;
+            }
+            else {
+                $stemmer{$field} = $1;
+            }
+        }
+        else {
+            fatal "invalid field definition at line $lnum of $fname: $field $defstr";
+        }
+    }
+    $prefixes{$field} = \@prefixes;
+}
+
+sub read_conf {
+    my ($f) = @_;
+    open my $fh, '<', $f or fatal "open $f: $!";
+    while (<$fh>) {
+        chomp;
+        next if /^\s*(?:#.*)?$/;  # Skip blank lines and comments
+        s/^\s*field\s+(\S+)\s+// or fatal "invalid config line at line $. of $f: $_";
+        define_field($1, $_, $f, $.);
+    }
+}
+
+sub usage {
+    print STDERR "usage: xaylo [-q] INDEX [QUERY...]\n";
+    exit 1;
+}
+
+sub fatal {
+    print STDERR "xaylo: @_\n";
+    exit 2;
+}
+
+__END__
+!xapian {
+    date     <D>       
+    memo     <S> @2 %english
+    body     <>     %english
+    account  <XACC>    
+    amount   <XAMT>    
+    category <XCAT>    
+}
+
