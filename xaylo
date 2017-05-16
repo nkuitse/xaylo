@@ -2,9 +2,9 @@
 
 use strict;
 use warnings;
-use diagnostics;
 
 use Search::Xapian qw(:standard);
+use Search::Xapian::PostingIterator;
 use Getopt::Long
     qw(:config posix_default gnu_compat require_order bundling no_ignore_case);
 
@@ -13,14 +13,15 @@ use constant SKIP => 20;
 sub usage;
 sub fatal;
 
-my ($conf_file, $query);
+my ($conf_file, $query, $fetch);
 GetOptions(
     'q|query' => \$query,
+    'k|fetch' => \$fetch,
     'c|config-file=s' => \$conf_file,
 ) or usage;
 my (%prefixes, %bool, %weight, %stemmer);
 
-&{ $query ? \&query : \&ingest };
+&{ $query ? \&query : $fetch ? \&fetch : \&ingest };
 
 sub query {
     my $dbdir = shift @ARGV;
@@ -43,6 +44,29 @@ sub query {
     1;
 }
 
+sub fetch {
+    my $dbdir = shift @ARGV;
+    usage if !@ARGV;
+    my $db = Search::Xapian::Database->new($dbdir);
+    $conf_file ||= "$dbdir/xaylo.conf";
+    read_conf($conf_file);
+    foreach my $q (@ARGV) {
+        my $pb = $db->postlist_begin('Q'.$q);
+        my $pe = $db->postlist_end('Q'.$q);
+        if ($pb->equals($pe)) {
+            my $docid = $pb->get_docid;
+            1;
+        }
+        if ($db->term_exists('Q'.$q)) {
+            print "YES $q\n";
+        }
+        else {
+            print "NO $q\n";
+        }
+    }
+
+}
+
 sub ingest {
     @ARGV = qw(.) if !@ARGV;
     my $dbdir = shift @ARGV;
@@ -56,7 +80,7 @@ sub ingest {
             or fatal "open $fname: $!";
     }
     while (<STDIN>) {
-        if (/^\s*!doc\s+\$(\S+)\s+\{\s*$/) {
+        if (/^\s*!doc(?:ument)?\s+\$(\S+)\s+\{\s*$/) {
             my $uniq = $1;
             my $data = '$'.$1."\n";
             my ($ktype, $k, $vtype, $v, $skip);
@@ -141,6 +165,9 @@ sub ingest {
                     die "Bad input: $_";
                 }
             }
+        }
+        elsif (/^\s*!del(?:ete)?\s+\$(\S+)\s*$/) {
+            $db->delete_document_by_term('Q'.$1);
         }
         elsif (/^\s*(?:#.*)?$/) {
             # Skip blank lines and comments
